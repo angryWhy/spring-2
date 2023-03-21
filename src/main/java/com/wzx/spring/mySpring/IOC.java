@@ -7,9 +7,11 @@ import java.net.URL;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class IOC {
+    private  ConcurrentHashMap<String,BeanDefinition> beanDefinitionMap = new ConcurrentHashMap<>();
+    private  ConcurrentHashMap<String,BeanDefinition> singletonObjects = new ConcurrentHashMap<>();
     private Class configClass;
     //存放的是通过反射创建的对象（基于注解）
-    private ConcurrentHashMap<String,Object> ioc = new ConcurrentHashMap<>();
+
     public IOC(Class config) throws ClassNotFoundException, InstantiationException, IllegalAccessException {
         this.configClass = config;
 
@@ -35,9 +37,18 @@ public class IOC {
 
                 Class<?> aClass = classLoader.loadClass(name);
                 if(aClass.isAnnotationPresent(Component.class)||aClass.isAnnotationPresent(Controller.class)){
-                    Class<?> aClass1 = Class.forName(name);
-                    Object instance = aClass1.newInstance();
-                    ioc.put(name,instance);
+                    BeanDefinition beanDefinition = new BeanDefinition();
+                    //1.解决名字称题
+                    Component declaredAnnotation = aClass.getDeclaredAnnotation(Component.class);
+                    String value = declaredAnnotation.value();
+                    beanDefinition.setClazz(aClass);
+                    if(aClass.isAnnotationPresent(Scope.class)){
+                        Scope declaredAnnotation1 = aClass.getDeclaredAnnotation(Scope.class);
+                        beanDefinition.setScope(declaredAnnotation1.value());
+                    }else{
+                        beanDefinition.setScope("singleton");
+                    }
+                    beanDefinitionMap.put(name,beanDefinition);
                 }else{
                     System.out.println("没有添加注解");
                 }
