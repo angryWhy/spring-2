@@ -1,61 +1,115 @@
 package com.wzx.spring.mySpring;
 
+import org.apache.commons.lang.StringUtils;
 import org.springframework.stereotype.Controller;
 
 import java.io.File;
+import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
+import java.util.Enumeration;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class IOC {
-    private  ConcurrentHashMap<String,BeanDefinition> beanDefinitionMap = new ConcurrentHashMap<>();
-    private  ConcurrentHashMap<String,BeanDefinition> singletonObjects = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, BeanDefinition> beanDefinitionMap = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, Object> singletonObjects = new ConcurrentHashMap<>();
     private Class configClass;
     //存放的是通过反射创建的对象（基于注解）
-
-    public IOC(Class config) throws ClassNotFoundException, InstantiationException, IllegalAccessException {
+    public IOC(Class config) throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException {
+        //完成扫描包
+        beanDefinitionScan(config);
+        //初始化单例池
+        //遍历所有的beandefinition
+        Enumeration<String> keys = beanDefinitionMap.keys();
+        //遍历集合
+        while (keys.hasMoreElements()) {
+            String beanName = keys.nextElement();
+            //拿到beanName
+            BeanDefinition beanDefinition = beanDefinitionMap.get(beanName);
+            if ("singleton".equalsIgnoreCase(beanDefinition.getScope())) {
+                Object bean = createBean(beanDefinition);
+                singletonObjects.put(beanName, bean);
+            }
+        }
+    }
+    public void beanDefinitionScan(Class config) throws ClassNotFoundException {
         this.configClass = config;
-
         //获取扫描的包，1，现货区SpringConfig的注解,拿到配置类上的注解
-        ComponentScan ComponentScan = (ComponentScan)this.configClass.getDeclaredAnnotation(ComponentScan.class);
+        ComponentScan ComponentScan = (ComponentScan) this.configClass.getDeclaredAnnotation(ComponentScan.class);
         //2.通过componentScan的value来获取=>扫描的包
         String path = ComponentScan.value();
-        path = path.replace("/",".");
+        path = path.replace("/", ".");
         //先得到类的加载器,获取扫描包的url
 
         ClassLoader classLoader = IOC.class.getClassLoader();
 
         URL resource = classLoader.getResource("src/com");
         File file = new File(resource.getFile());
-        if(file.isDirectory()){
+        if (file.isDirectory()) {
             File[] files = file.listFiles();
-            for(File f : files){
+            for (File f : files) {
                 String absolutePath = f.getAbsolutePath();
-                if(!absolutePath.endsWith(".class")) continue;
+                if (!absolutePath.endsWith(".class")) continue;
                 //先获取到类名
                 String className = absolutePath.substring(absolutePath.lastIndexOf("\\") + 1, absolutePath.indexOf(".class"));
-                String name =  path.replace(".","/")+"." + className;
+                String name = path.replace(".", "/") + "." + className;
 
                 Class<?> aClass = classLoader.loadClass(name);
-                if(aClass.isAnnotationPresent(Component.class)||aClass.isAnnotationPresent(Controller.class)){
+                if (aClass.isAnnotationPresent(Component.class) || aClass.isAnnotationPresent(Controller.class)) {
                     BeanDefinition beanDefinition = new BeanDefinition();
                     //1.解决名字称题
                     Component declaredAnnotation = aClass.getDeclaredAnnotation(Component.class);
-                    String value = declaredAnnotation.value();
+                    String beanName = declaredAnnotation.value();
+                    if ("".equals(beanName)) {
+                        //如果没有指定value名字，
+                        beanName = StringUtils.uncapitalize(className);
+                    }
                     beanDefinition.setClazz(aClass);
-                    if(aClass.isAnnotationPresent(Scope.class)){
+                    if (aClass.isAnnotationPresent(Scope.class)) {
                         Scope declaredAnnotation1 = aClass.getDeclaredAnnotation(Scope.class);
                         beanDefinition.setScope(declaredAnnotation1.value());
-                    }else{
+                    } else {
                         beanDefinition.setScope("singleton");
                     }
-                    beanDefinitionMap.put(name,beanDefinition);
-                }else{
+                    beanDefinitionMap.put(name, beanDefinition);
+                } else {
                     System.out.println("没有添加注解");
                 }
             }
         }
     }
-    public Object getBean(String name){
-        return null;
+
+    public Object createBean(BeanDefinition beanDefinition) throws NoSuchMethodException {
+        Class clazz = beanDefinition.getClazz();
+        try {
+            Object instance = clazz.getDeclaredConstructor().newInstance();
+            return instance;
+        } catch (InstantiationException e) {
+            throw new RuntimeException(e);
+
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException(e);
+
+        } catch (InvocationTargetException e) {
+
+            throw new RuntimeException(e);
+
+        }
+    }
+
+    public Object getBean(String name) throws NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException {
+        if (beanDefinitionMap.get(name) != null) {
+            BeanDefinition beanDefinition = beanDefinitionMap.get(name);
+            if ("singleton".equalsIgnoreCase(beanDefinition.getScope())) {
+                return singletonObjects.get(name);
+            } else if ("prototype".equalsIgnoreCase(beanDefinition.getScope())) {
+                Class clazz = beanDefinition.getClazz();
+                Object o = clazz.getDeclaredConstructor().newInstance();
+                return o;
+            } else {
+                return null;
+            }
+        } else {
+            return null;
+        }
     }
 }
