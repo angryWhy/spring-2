@@ -4,6 +4,7 @@ import org.apache.commons.lang.StringUtils;
 import org.springframework.stereotype.Controller;
 
 import java.io.File;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.util.Enumeration;
@@ -82,6 +83,17 @@ public class IOC {
         Class clazz = beanDefinition.getClazz();
         try {
             Object instance = clazz.getDeclaredConstructor().newInstance();
+            for(Field key :clazz.getDeclaredFields()){
+                if(key.isAnnotationPresent(Autowired.class)){
+                    String name = key.getName();
+                    //拿到bean对象,进行依赖注入
+                    Object bean = getBean(name);
+                    //属性是私有的需要爆破
+                    key.setAccessible(true);
+                    //设置（对象，值）
+                    key.set(instance,bean);
+                }
+            }
             return instance;
         } catch (InstantiationException e) {
             throw new RuntimeException(e);

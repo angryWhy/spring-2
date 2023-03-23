@@ -9,8 +9,5 @@
         <module name="spring-wzx" />
       </profile>
     </annotationProcessing>
-    <bytecodeTargetLevel>
-      <module name="mySpring" target="1.8" />
-    </bytecodeTargetLevel>
   </component>
 </project>
