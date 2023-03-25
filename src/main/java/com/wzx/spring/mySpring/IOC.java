@@ -1,18 +1,24 @@
 package com.wzx.spring.mySpring;
 
+import com.wzx.spring.mySpring.processor.BeanProcessor;
+import com.wzx.spring.mySpring.processor.InitialzingBean;
 import org.apache.commons.lang.StringUtils;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.stereotype.Controller;
 
 import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class IOC {
     private ConcurrentHashMap<String, BeanDefinition> beanDefinitionMap = new ConcurrentHashMap<>();
     private ConcurrentHashMap<String, Object> singletonObjects = new ConcurrentHashMap<>();
+    private List<BeanProcessor> beanProcessorList = new ArrayList<>();
     private Class configClass;
     //存放的是通过反射创建的对象（基于注解）
     public IOC(Class config) throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException {
@@ -27,7 +33,7 @@ public class IOC {
             //拿到beanName
             BeanDefinition beanDefinition = beanDefinitionMap.get(beanName);
             if ("singleton".equalsIgnoreCase(beanDefinition.getScope())) {
-                Object bean = createBean(beanDefinition);
+                Object bean = createBean(beanName,beanDefinition);
                 singletonObjects.put(beanName, bean);
             }
         }
@@ -79,7 +85,7 @@ public class IOC {
         }
     }
 
-    public Object createBean(BeanDefinition beanDefinition) throws NoSuchMethodException {
+    public Object createBean(String beanName,BeanDefinition beanDefinition) throws NoSuchMethodException {
         Class clazz = beanDefinition.getClazz();
         try {
             Object instance = clazz.getDeclaredConstructor().newInstance();
@@ -94,6 +100,23 @@ public class IOC {
                     key.set(instance,bean);
                 }
             }
+            if(BeanProcessor.class.isAssignableFrom(clazz)){
+                BeanProcessor o = (BeanProcessor)clazz.newInstance();
+                beanProcessorList.add(o);
+            }
+
+            //beanpostprocessor的before方法
+            for(BeanProcessor bean : beanProcessorList){
+                Object o = bean.postProcessBeforeInitialization(instance, beanName);
+            }
+
+            if(instance instanceof InitialzingBean){
+                ((InitialzingBean)instance).afterPropertiesSet();
+            }
+            //beanpostprocessor的after方法
+            for(BeanProcessor bean : beanProcessorList){
+                Object o = bean.postProcessBeforeInitialization(instance, "...");
+            }
             return instance;
         } catch (InstantiationException e) {
             throw new RuntimeException(e);
@@ -102,9 +125,9 @@ public class IOC {
             throw new RuntimeException(e);
 
         } catch (InvocationTargetException e) {
-
             throw new RuntimeException(e);
-
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
 
